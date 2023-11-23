@@ -20,6 +20,7 @@
 #define MAX_LIMIT 10
 #define MAX_GROUP_LIMIT 5 // each group can have maximum 5 clients
 #define MAX_GROUP_NUM 20 // maximum 20 group formation is possible
+#define MAX_ABUSIVE_MESSAGE 5 // Number of abusive message allowed
 
 #define P(s) semop(s, &pop, 1)  /* pop is the structure we pass for doing the P(s) operation */
 #define V(s) semop(s, &vop, 1)  /* vop is the structure we pass for doing the V(s) operation */
@@ -32,6 +33,7 @@ typedef struct{
 	int isInitialized; // whether the key ever initialized
 	int groupIds[MAX_GROUP_NUM][2]; // index = 0 -> whether the client belongs to that group or not
 									// index = 1 -> whether the clinet is admin in that group or not
+    int numAbusiveMessage;
 } uniqueClientKeys;
 
 // Structure for group
@@ -221,6 +223,8 @@ void removeQuitClient(int keyInt,int newGroupId){
 void removeRecClient(int key, int newsockfd){
 	//WRITE YOUR CODE HERE	
 	clientKeys[key].isActive = 0; // make the client deactivate
+    clientKeys[key].numAbusiveMessage = 0; // reset to 0
+
 	printf("%d has been disconnected\n",key);
 
 	// Inform all the others clients that a particular client has been disconnected
@@ -263,6 +267,34 @@ int getClientId(){
 
 
 /*FUNCTIONS BELOW HANLES ALL SORT OF MESSAGE QUERIES FROM CLIENT*/
+// check if the message is abusive or not if abusive then block it
+int isTheMessageAbusive(char *message,int key){
+    // run the python code to test whether the message is abusive or not
+    pid_t pid = 0;
+    int status;
+    pid = fork();
+    if(pid == 0){ // child process handels the KNN part
+        // Close STDOUT file descriptor for child
+        close(1); // close STDOUT
+        execlp("python","python","tester.py",message,NULL);
+        printf("Never execute\n");
+    }else{
+        wait(&status); // wait child process to finish
+    }
+	// system(msgcheck);
+
+	// Reading the fle
+	FILE* fp = fopen("temp.txt","r");
+    printf("Message : %s\n",message);
+	int isAbusive;
+	fscanf(fp,"%d",&isAbusive);
+
+    // inclrease number of accepted abusive message
+    if(isAbusive){
+        clientKeys[key].numAbusiveMessage++;
+    }
+    return isAbusive;
+}
 
 /* function to processs messages from clients*/
 void sendMsg(int newsockfd, int key, char buffer[]){
@@ -338,13 +370,23 @@ void sendMsg(int newsockfd, int key, char buffer[]){
 	sprintf(messageConetent,"Message from - %d\n-> ",key);
 	strcpy(messageConetent+strlen(messageConetent),tmp);
 
+    // Send the text message to check if it is abusive or not
+	int isAbusive = isTheMessageAbusive(tmp,key);
+
+	if(isAbusive == 1){
+		sendMessageClient(newsockfd,"Sent abusive message. !!MSG Blocked!!");
+        // remove that client from the server if number of abusive message exceeds
+        if(clientKeys[key].numAbusiveMessage == MAX_ABUSIVE_MESSAGE){
+            sendMessageClient(newsockfd,"You are kicked-out form the server, due to abusive languages!\n");
+            removeRecClient(key,newsockfd); // remove the client
+        }
+	}else{
+		send(destSockfd,messageConetent,sizeof(messageConetent),0);
+		sendMessageClient(newsockfd,"Message delivered to the client successfully!");
+	}
 	// printf("Dest key = %d\n",destKeyInt);
 	// printf("Message content = %s\n",tmp);
-
-	send(destSockfd,messageConetent,sizeof(messageConetent),0);
-	sendMessageClient(newsockfd,"Message delivered to the client successfully!");
 	return;
-	
 }
 
 /*FUCTION TO HANDLE BROADCAST REQUEST*/
@@ -381,13 +423,25 @@ void broadcast(int newsockfd, int key, char *buffer){
 	// printf("Message = %s\n",messageConetent);
 
 	// Broadcast the message to all other clients
-	for(int i=10000;i<=99999;i++){
-		if(i != key && clientKeys[i].isActive){
-			send(clientKeys[i].sockfd,messageConetent,sizeof(messageConetent),0);
-		}
+    int isAbusive = isTheMessageAbusive(tmp,key);
+
+    if(isAbusive == 1){
+		sendMessageClient(newsockfd,"Sent abusive message. !!MSG Blocked!!");
+
+        // remove that client from the server if number of abusive message exceeds
+        if(clientKeys[key].numAbusiveMessage == MAX_ABUSIVE_MESSAGE){
+            sendMessageClient(newsockfd,"You are kicked-out form the server, due to abusive languages!\n");
+            removeRecClient(key,newsockfd); // remove the client
+        }
+	}else{
+		for(int i=10000;i<=99999;i++){
+            if(i != key && clientKeys[i].isActive){
+                send(clientKeys[i].sockfd,messageConetent,sizeof(messageConetent),0);
+            }
+        }
+        sendMessageClient(newsockfd,"Message broadcasted successfully!\n");
 	}
 
-	sendMessageClient(newsockfd,"Message broadcasted successfully!\n");
 	return;
 }
 
