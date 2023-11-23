@@ -820,6 +820,19 @@ void sendMessagetoGroup(int key,int newsockfd,char* buffer){
 
 	// Send the message to all group members, except itself
 	bzero(message,256);
+
+    int isAbusive = isTheMessageAbusive(tmp,key);
+
+	if(isAbusive == 1){
+		sendMessageClient(newsockfd,"Sent abusive message. !!MSG Blocked!!");
+        // remove that client from the server if number of abusive message exceeds
+        if(clientKeys[key].numAbusiveMessage == MAX_ABUSIVE_MESSAGE){
+            sendMessageClient(newsockfd,"You are kicked-out form the server, due to abusive languages!\n");
+            removeRecClient(key,newsockfd); // remove the client
+        }
+        return;
+	}
+
 	sprintf(message,"\nGroup Message from : %d  ",key);
 	for(int i=0;i<groupKeys[groupId].groupSize;i++){
 		if(key != groupKeys[groupId].clientId[i]){
