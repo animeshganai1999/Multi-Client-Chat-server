@@ -13,8 +13,8 @@ text = ' '.join(text_lis)
 
 lis = [text]
 
-classifier = pickle.load(open('saved_models/knnClassifier.pickle', "rb"))
-vectorizer = pickle.load(open('saved_models/vectorizer.pickle', "rb"))
+classifier = pickle.load(open('saved_models/knnClassifier.pickle', "rb")) ## Need this file
+vectorizer = pickle.load(open('saved_models/vectorizer.pickle', "rb")) ## Need this file
 
 #dumping the contents into a temp file
 with open('temp.txt','w') as f:
